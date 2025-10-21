@@ -4,14 +4,12 @@ import Square from "./Square/Square";
 import { io } from "socket.io-client";
 import Swal from "sweetalert2";
 
-const renderFrom = [
-  [1, 2, 3],
-  [4, 5, 6],
-  [7, 8, 9],
-];
-
 const App = () => {
-  const [gameState, setGameState] = useState(renderFrom);
+  const [gameState, setGameState] = useState([
+    [1, 2, 3],
+    [4, 5, 6],
+    [7, 8, 9],
+  ]);
   const [currentPlayer, setCurrentPlayer] = useState("circle");
   const [finishedState, setFinishetState] = useState(false);
   const [finishedArrayState, setFinishedArrayState] = useState([]);
@@ -20,46 +18,58 @@ const App = () => {
   const [playerName, setPlayerName] = useState("");
   const [opponentName, setOpponentName] = useState(null);
   const [playingAs, setPlayingAs] = useState(null);
+  const [playAgainRequested, setPlayAgainRequested] = useState(false);
+  const [opponentRequestedPlayAgain, setOpponentRequestedPlayAgain] = useState(false);
+  const [gameKey, setGameKey] = useState(0);
 
   const checkWinner = () => {
-    // row dynamic
+    // Check rows
     for (let row = 0; row < gameState.length; row++) {
       if (
         gameState[row][0] === gameState[row][1] &&
-        gameState[row][1] === gameState[row][2]
+        gameState[row][1] === gameState[row][2] &&
+        (gameState[row][0] === "circle" || gameState[row][0] === "cross")
       ) {
         setFinishedArrayState([row * 3 + 0, row * 3 + 1, row * 3 + 2]);
         return gameState[row][0];
       }
     }
 
-    // column dynamic
+    // Check columns
     for (let col = 0; col < gameState.length; col++) {
       if (
         gameState[0][col] === gameState[1][col] &&
-        gameState[1][col] === gameState[2][col]
+        gameState[1][col] === gameState[2][col] &&
+        (gameState[0][col] === "circle" || gameState[0][col] === "cross")
       ) {
         setFinishedArrayState([0 * 3 + col, 1 * 3 + col, 2 * 3 + col]);
         return gameState[0][col];
       }
     }
 
+    // Check diagonal
     if (
       gameState[0][0] === gameState[1][1] &&
-      gameState[1][1] === gameState[2][2]
+      gameState[1][1] === gameState[2][2] &&
+      (gameState[0][0] === "circle" || gameState[0][0] === "cross")
     ) {
+      setFinishedArrayState([0, 4, 8]);
       return gameState[0][0];
     }
 
+    // Check anti-diagonal
     if (
       gameState[0][2] === gameState[1][1] &&
-      gameState[1][1] === gameState[2][0]
+      gameState[1][1] === gameState[2][0] &&
+      (gameState[0][2] === "circle" || gameState[0][2] === "cross")
     ) {
+      setFinishedArrayState([2, 4, 6]);
       return gameState[0][2];
     }
 
+    // Check draw
     const isDrawMatch = gameState.flat().every((e) => {
-      if (e === "circle" || e === "cross") return true;
+      return e === "circle" || e === "cross";
     });
 
     if (isDrawMatch) return "draw";
@@ -73,6 +83,30 @@ const App = () => {
       setFinishetState(winner);
     }
   }, [gameState]);
+
+  const playAgain = () => {
+    if (!playAgainRequested) {
+      setPlayAgainRequested(true);
+      socket.emit("playAgainRequest");
+    }
+  };
+
+  const resetGame = () => {
+    // Create completely fresh board
+    const freshBoard = [
+      [1, 2, 3],
+      [4, 5, 6],
+      [7, 8, 9],
+    ];
+    
+    setGameState(freshBoard);
+    setCurrentPlayer("circle");
+    setFinishetState(false);
+    setFinishedArrayState([]);
+    setPlayAgainRequested(false);
+    setOpponentRequestedPlayAgain(false);
+    setGameKey(prev => prev + 1); // Force re-render of all squares
+  };
 
   const takePlayerName = async () => {
     const result = await Swal.fire({
@@ -89,34 +123,65 @@ const App = () => {
     return result;
   };
 
-  socket?.on("opponentLeftMatch", () => {
-    setFinishetState("opponentLeftMatch");
-  });
+  useEffect(() => {
+    if (!socket) return;
 
-  socket?.on("playerMoveFromServer", (data) => {
-    const id = data.state.id;
-    setGameState((prevState) => {
-      let newState = [...prevState];
-      const rowIndex = Math.floor(id / 3);
-      const colIndex = id % 3;
-      newState[rowIndex][colIndex] = data.state.sign;
-      return newState;
-    });
-    setCurrentPlayer(data.state.sign === "circle" ? "cross" : "circle");
-  });
+    const handleOpponentLeft = () => {
+      setFinishetState("opponentLeftMatch");
+    };
 
-  socket?.on("connect", function () {
-    setPlayOnline(true);
-  });
+    const handlePlayerMove = (data) => {
+      const id = data.state.id;
+      setGameState((prevState) => {
+        let newState = [...prevState];
+        const rowIndex = Math.floor(id / 3);
+        const colIndex = id % 3;
+        newState[rowIndex][colIndex] = data.state.sign;
+        return newState;
+      });
+      setCurrentPlayer(data.state.sign === "circle" ? "cross" : "circle");
+    };
 
-  socket?.on("OpponentNotFound", function () {
-    setOpponentName(false);
-  });
+    const handleConnect = () => {
+      setPlayOnline(true);
+    };
 
-  socket?.on("OpponentFound", function (data) {
-    setPlayingAs(data.playingAs);
-    setOpponentName(data.opponentName);
-  });
+    const handleOpponentNotFound = () => {
+      setOpponentName(false);
+    };
+
+    const handleOpponentFound = (data) => {
+      setPlayingAs(data.playingAs);
+      setOpponentName(data.opponentName);
+    };
+
+    const handleOpponentRequestedPlayAgain = () => {
+      setOpponentRequestedPlayAgain(true);
+    };
+
+    const handleGameReset = () => {
+      console.log("Game reset received from server");
+      resetGame();
+    };
+
+    socket.on("opponentLeftMatch", handleOpponentLeft);
+    socket.on("playerMoveFromServer", handlePlayerMove);
+    socket.on("connect", handleConnect);
+    socket.on("OpponentNotFound", handleOpponentNotFound);
+    socket.on("OpponentFound", handleOpponentFound);
+    socket.on("opponentRequestedPlayAgain", handleOpponentRequestedPlayAgain);
+    socket.on("gameReset", handleGameReset);
+
+    return () => {
+      socket.off("opponentLeftMatch", handleOpponentLeft);
+      socket.off("playerMoveFromServer", handlePlayerMove);
+      socket.off("connect", handleConnect);
+      socket.off("OpponentNotFound", handleOpponentNotFound);
+      socket.off("OpponentFound", handleOpponentFound);
+      socket.off("opponentRequestedPlayAgain", handleOpponentRequestedPlayAgain);
+      socket.off("gameReset", handleGameReset);
+    };
+  }, [socket]);
 
   async function playOnlineClick() {
     const result = await takePlayerName();
@@ -177,7 +242,7 @@ const App = () => {
       </div>
       <div>
         <h1 className="game-heading water-background">Tic Tac Toe</h1>
-        <div className="square-wrapper">
+        <div className="square-wrapper" key={gameKey}>
           {gameState.map((arr, rowIndex) =>
             arr.map((e, colIndex) => {
               return (
@@ -217,6 +282,22 @@ const App = () => {
       )}
       {finishedState && finishedState === "opponentLeftMatch" && (
         <h2>You won the match, Opponent has left</h2>
+      )}
+      {finishedState && finishedState !== "opponentLeftMatch" && (
+        <div>
+          <button 
+            onClick={playAgain} 
+            className="playAgainbutton" 
+            disabled={playAgainRequested && !opponentRequestedPlayAgain}
+          >
+            {playAgainRequested 
+              ? "Waiting for opponent..."
+              : opponentRequestedPlayAgain 
+                ? "Opponent wants to play again - Click to start!" 
+                : "Play Again"
+            }
+          </button>
+        </div>
       )}
     </div>
   );

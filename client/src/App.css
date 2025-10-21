@@ -18,6 +18,18 @@
   outline: none;
 }
 
+.playAgainbutton{
+  font-weight: 600;
+  border: none;
+  background-color: #e4ca56;
+  font-size: 20px;
+  cursor: pointer;
+  margin-top: 5px;
+  padding: 6px 10px;
+  border-radius: 5px;
+  outline: none;
+}
+
 .water-background {
   background-color: #4b495f;
 }

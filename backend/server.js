@@ -4,22 +4,21 @@ const dotenv = require("dotenv");
 
 dotenv.config();
 
-const PORT = process.env.PORT || 3000; // <-- use dynamic port
+const PORT = process.env.PORT || 3000;
 const httpServer = createServer();
 
 const io = new Server(httpServer, {
   cors: {
-    origin: ["https://tictactoe-multiplayer-1-q1k6.onrender.com"],
+    origin: ["http://localhost:5173"],
     methods: ["GET", "POST"],
   },
 });
-
 
 const allUsers = {};
 const allRooms = [];
 
 io.on("connection", (socket) => {
-  console.log("a user connected");
+  console.log("a user connected:", socket.id);
   allUsers[socket.id] = { socket, online: true, playing: false };
 
   io.emit("players_online", { count: Object.keys(allUsers).length });
@@ -42,7 +41,13 @@ io.on("connection", (socket) => {
       currentUser.playing = true;
       opponentPlayer.playing = true;
 
-      allRooms.push({ player1: opponentPlayer, player2: currentUser });
+      const roomData = {
+        player1: opponentPlayer,
+        player2: currentUser,
+        player1RequestedPlayAgain: false,
+        player2RequestedPlayAgain: false,
+      };
+      allRooms.push(roomData);
 
       currentUser.socket.emit("OpponentFound", {
         opponentName: opponentPlayer.playerName,
@@ -61,12 +66,81 @@ io.on("connection", (socket) => {
       opponentPlayer.socket.on("playerMoveFromClient", (data) => {
         currentUser.socket.emit("playerMoveFromServer", data);
       });
+
+      // Handle play again request from currentUser
+      currentUser.socket.on("playAgainRequest", () => {
+        console.log(`${currentUser.playerName} requested play again`);
+        
+        const room = allRooms.find(
+          (r) => (r.player1.socket.id === currentUser.socket.id || r.player2.socket.id === currentUser.socket.id)
+        );
+
+        if (room) {
+          // Mark this player as requesting play again
+          if (room.player1.socket.id === currentUser.socket.id) {
+            room.player1RequestedPlayAgain = true;
+          } else {
+            room.player2RequestedPlayAgain = true;
+          }
+
+          // Notify the opponent
+          opponentPlayer.socket.emit("opponentRequestedPlayAgain");
+          console.log(`Notified ${opponentPlayer.playerName} about play again request`);
+
+          // If both players requested, reset the game
+          if (room.player1RequestedPlayAgain && room.player2RequestedPlayAgain) {
+            console.log("Both players agreed - Resetting game");
+            
+            room.player1.socket.emit("gameReset");
+            room.player2.socket.emit("gameReset");
+            
+            // Reset the request flags for next game
+            room.player1RequestedPlayAgain = false;
+            room.player2RequestedPlayAgain = false;
+          }
+        }
+      });
+
+      // Handle play again request from opponentPlayer
+      opponentPlayer.socket.on("playAgainRequest", () => {
+        console.log(`${opponentPlayer.playerName} requested play again`);
+        
+        const room = allRooms.find(
+          (r) => (r.player1.socket.id === opponentPlayer.socket.id || r.player2.socket.id === opponentPlayer.socket.id)
+        );
+
+        if (room) {
+          // Mark this player as requesting play again
+          if (room.player1.socket.id === opponentPlayer.socket.id) {
+            room.player1RequestedPlayAgain = true;
+          } else {
+            room.player2RequestedPlayAgain = true;
+          }
+
+          // Notify the opponent
+          currentUser.socket.emit("opponentRequestedPlayAgain");
+          console.log(`Notified ${currentUser.playerName} about play again request`);
+
+          // If both players requested, reset the game
+          if (room.player1RequestedPlayAgain && room.player2RequestedPlayAgain) {
+            console.log("Both players agreed - Resetting game");
+            
+            room.player1.socket.emit("gameReset");
+            room.player2.socket.emit("gameReset");
+            
+            // Reset the request flags for next game
+            room.player1RequestedPlayAgain = false;
+            room.player2RequestedPlayAgain = false;
+          }
+        }
+      });
     } else {
       currentUser.socket.emit("OpponentNotFound");
     }
   });
 
   socket.on("disconnect", () => {
+    console.log("User disconnected:", socket.id);
     const currentUser = allUsers[socket.id];
     if (currentUser) {
       currentUser.online = false;
