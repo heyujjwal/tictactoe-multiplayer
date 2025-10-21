@@ -9,7 +9,7 @@ const httpServer = createServer();
 
 const io = new Server(httpServer, {
   cors: {
-    origin: [process.env.VITE_CLIENT_URL],
+    origin: ["https://tictactoe-multiplayer-nine.vercel.app/"],
     methods: ["GET", "POST"],
   },
 });
