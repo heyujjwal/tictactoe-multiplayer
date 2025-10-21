@@ -3,6 +3,8 @@ const { Server } = require("socket.io");
 const dotenv = require("dotenv");
 
 dotenv.config();
+
+const PORT = process.env.PORT || 3000; // <-- use dynamic port
 const httpServer = createServer();
 
 const io = new Server(httpServer, {
@@ -90,6 +92,6 @@ io.on("connection", (socket) => {
   });
 });
 
-httpServer.listen(3000, () => {
-  console.log("Server listening on port 3000");
+httpServer.listen(PORT, () => {
+  console.log(`Server listening on port ${PORT}`);
 });
