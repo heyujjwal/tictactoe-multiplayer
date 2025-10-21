@@ -9,7 +9,7 @@ const httpServer = createServer();
 
 const io = new Server(httpServer, {
   cors: {
-    origin: ["https://tictactoe-multiplayer-client.onrender.com"],
+    origin: [process.env.VITE_CLIENT_URL],
     methods: ["GET", "POST"],
   },
 });
